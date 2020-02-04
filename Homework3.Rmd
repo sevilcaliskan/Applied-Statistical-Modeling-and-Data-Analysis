@@ -1,0 +1,400 @@
+---
+title: "Homework 3"
+author: "Sevil Çalışkan"
+date: "13.05.2018"
+output: html_document
+---
+
+
+```{r cars}
+library(faraway)
+library(magrittr)
+library(tidyverse)
+library(knitr)
+library(kableExtra)
+library(lattice)
+library(ggplot2)
+library(plyr)
+
+d <- data(pima)
+#?faraway::pima
+knitr::opts_chunk$set(echo = TRUE, cache=TRUE)
+
+```
+
+##Question 1
+
+In Question 1, it is give that a grocer can measure the exact weight of anything weighing between 1 and 40 grams (integers only) in his store with his scale and four scale weights. It is asked what can those four scale weights be. The hint is whether the problem can be modelled as regression. Thinking over the hint, I have realised that 4 scale weights can be either used for the weighting purpose or not. For the weighting purpose, it can be used either side of the scale, which leaves us with 3 choices: ${-1,0,1} $. Add to the weigth side, substract from weight side or do nothing with $3^4 = 81$ cases. We want to weigth the values from 1 to 40, this leaves us with 81 responses adding negative and zero responses. Then, we can set a linear regression model with cases and responses and the coefficients would be the scale weights. Solution can be seen below.
+```{r }
+x1 = x2 = x3 = x4 =seq(-1,1,len = 3)
+y = seq(-40,40,len = 81)
+d <- expand.grid(x1,x2,x3,x4) 
+d <- cbind(d,y)
+
+lm(y ~ Var1 + Var2 + Var3 + Var4 , d)
+```
+After fitting the model, we see that the four scale weights are 1, 3, 9 and 27 grams.
+
+In part b, we shall perform the same analysis above with 6 scale weights and to weight from 1 to 364 grams.
+```{r }
+x1 = x2 = x3 = x4 = x5 = x6 = seq(-1,1,len = 3)
+y = seq(-364,364,len = 364*2+1)
+d <- expand.grid(x1,x2,x3,x4,x5,x6) 
+d <- cbind(d,y)
+
+lm(y ~ Var1 + Var2 + Var3 + Var4 + Var5 + Var6 , d)
+```
+After fitting the model, we see that the six scale weights are 1, 3, 9, 27, 81 and 243 grams and it can be seen that they follow the powers of 3. 
+
+## Question 2
+
+Pima data is given by the faraway package and the histograms of insulin regarding diabetes test is drawn as below:
+
+```{r }
+hist_data <-
+  pima %>% 
+  mutate(test_fac = factor(test)) %>% 
+  subset(., select = c(insulin,test_fac))
+
+mu <- hist_data %>%
+  ddply("test_fac", summarise, grp.mean=mean(insulin))
+
+hist_data %>%
+  ggplot(aes(x = insulin,fill =test_fac,color = test_fac)) +
+  geom_histogram(binwidth=30, position="identity", alpha = 0.5)+
+  geom_vline(data=mu, aes(xintercept=grp.mean, color=test_fac),
+             linetype="dashed")+
+  theme(legend.position="top")
+  
+```
+We see that for both groups, whether the patient shows signs of diabetes, zero insulin level seems to be most counted level, while it is not really likely for a person to have a zero level of insulin since it is one of the vital hormones. As as result, zero level probably reflects the unknown/missing values so we should remove them.
+
+```{r }
+hist_data$insulin[hist_data$insulin == 0] <- NA
+
+ mu <- hist_data %>%
+  ddply("test_fac", summarise, grp.mean=mean(insulin, na.rm = TRUE))
+
+hist_data %>%
+  ggplot(aes(x = insulin,fill =test_fac,color = test_fac)) +
+  geom_histogram(binwidth=30, position="identity", alpha = 0.5)+
+  geom_vline(data=mu, aes(xintercept=grp.mean, color=test_fac),
+             linetype="dashed")+
+  theme(legend.position="top")
+  
+```
+Above true histogram of insuline levels for two groups can be seen. From the figure, we can say that patients who do not show any sign of diabetes have lower levels of insuline while the ones shows the sign of the diabetes have higher levels.
+
+```{r }
+data <- pima
+data$glucose[data$glucose == 0] <- NA
+data$diastolic[data$diastolic == 0] <- NA
+data$triceps[data$triceps == 0] <- NA
+data$insulin[data$insulin == 0] <- NA
+data$bmi[data$bmi == 0] <- NA
+data$age[data$age == 0] <- NA
+data$test <- factor(data$test)
+
+
+```
+We should replace some zero values with NA since they are not likely to be observed and indicate missing values. Those values are glucosei diastolic, triceps, insuline and bmi since those cannot be zero for a person alive. Also, study conducted on adult people so age also cannot be zero.
+
+```{r }
+lmod <- glm(test ~ ., family=binomial, data)
+
+summary(lmod)
+
+```
+When we fit a model after replacing the values, we see that 392 observations were used for the model and it is less than 768 observations of total. It is less than total observations because rows or observations with NA values are not used while fitting the model. 
+
+```{r }
+lmods <- glm(test ~ pregnant + glucose + diastolic + bmi + diabetes + age, family=binomial, data)
+summary(lmods)
+```
+Now, we fitted a new model by dropping triceps and insuline variables and see that 752 observations were used, which indicates that most of the unobserved values were triceps and insuline values. 
+
+In order to test the models, we cannot use deviance or chisquare test since number of samples are different. However, we can test whether models predict well or not by setting the prediction treshold to 0.5 (i.e if predicted success probability is greater than 0.5, we accept that model predicts success). By changing this treshold, we can observe how well model performs at different treshold and draw an ROC curve. Area under the ROC curve reflects how well the model performs. 
+```{r }
+data_mod1 <- data
+data_mod1 <- na.omit(data_mod1)
+data_mod1 <- mutate(data_mod1, predprob=predict(lmod, type="response"), predout=ifelse(predprob < 0.5, "no", "yes"))
+pre1 <- xtabs( ~ test + predout, data_mod1)
+(pre1[1,1]+pre1[2,2])/sum(pre1)
+
+thresh <- seq(0.01,0.5,0.01)
+Sensitivity <- numeric(length(thresh))
+Specificity <- numeric(length(thresh))
+
+for(j in seq(along=thresh)){
+  pp <- ifelse(data_mod1$predprob < thresh[j],"no","yes")
+  xx <- xtabs( ~ test + pp, data_mod1)
+  Specificity[j] <- xx[1,1]/(xx[1,1]+xx[1,2])
+  Sensitivity[j] <- xx[2,2]/(xx[2,1]+xx[2,2])
+}
+
+plot(1-Specificity,Sensitivity,type="l") 
+```
+
+```{r }
+# #data_mod2 <- subset(data, select = c(pregnant , glucose , diastolic , bmi , diabetes , age,test))
+# data_mod2 <- na.omit(subset(data, select = c(pregnant , glucose , diastolic , bmi , diabetes , age,test)))
+# data_mod2 <- mutate(data_mod2, predprob=predict(lmods, type="response"),predout=ifelse(predprob < 0.5, "no", "yes"))
+# pre2 <- xtabs( ~ test + predout, data_mod2)
+# (pre2[1,1]+pre2[2,2])/sum(pre2)
+# 
+# 
+# for(j in seq(along=thresh)){
+#   pp <- ifelse(data_mod2$predprob < thresh[j],"no","yes")
+#   xx <- xtabs( ~ test + pp, data_mod2)
+#   Specificity[j] <- xx[1,1]/(xx[1,1]+xx[1,2])
+#   Sensitivity[j] <- xx[2,2]/(xx[2,1]+xx[2,2])
+# }
+# 
+# plot(1-Specificity,Sensitivity,type="l")
+
+
+```
+
+
+Models seem to be close in terms of fit however note that model 2 has a higher number of data and it might be the cause of showing similar performance to model 1, even though is has less variables.
+
+
+```{r }
+
+c(AIC(lmod), AIC(lmods))
+
+```
+AIC results indicates that model 2 should be chosen.
+
+
+```{r }
+data <- na.omit(data)
+lmods <- glm(test ~ pregnant + glucose + diastolic + bmi + diabetes + age, family=binomial, data)
+summary(lmods)
+
+```
+It makes more sense to remover all the observations with missing data since those missing values may include information that may change the fit or model chose. Models should be tested with equal number of data whose all variables are known. 
+
+The odds of testing positive for diabetes for a woman increase by $e^{\beta_{bmi}*x_{bmi}} $ with 1 unit increase in BMI assuming that all other factors are held constant. As a result, the difference in the odds of testing positive for diabetes for a woman with a BMI at the first quartile compared with a woman at the third quartile is given as below:
+```{r }
+q <- quantile(data$bmi) 
+
+c(exp(coef(summary(lmods))["bmi",1]*q[[1]]),exp(coef(summary(lmods))["bmi",1]*q[[2]]))
+c(exp(coef(summary(lmods))["bmi",1]*q[[3]]),exp(coef(summary(lmods))["bmi",1]*q[[4]]))
+
+```
+
+```{r }
+# Straight from the data
+pos_dm <- subset(data$diastolic, data$test == 1)
+neg_dm <- subset(data$diastolic, data$test == 0)
+
+par(mfrow=c(1,2))
+boxplot(pos_dm, main="Positive for DM")
+boxplot(neg_dm, main="Negative for DM")
+
+t.test(pos_dm,neg_dm)
+#(mean(pos_dm)-mean(neg_dm))/sqrt(var(pos_dm)/length(pos_dm)+var(neg_dm)/length(neg_dm))
+coef(summary(lmods))["diastolic",]
+
+```
+
+In the regression model, diastolic is not statistically significant looking at p-value of the coeffient while after plotting boxplots and applying t-test, we see that the women who test positive have higher diastolic blood pressures in deed and the difference is statistically significant.Diastoic in regression means if it impacts the target variable, whereas the previous question only talks about the descriptive statistics. It does not seem to be important in the regression probably due to missing data or being correlated with other variables.
+
+
+##Question 3
+In this question, a biologist analyzed an experiment to determine the effect of moisture content
+on seed germination. Eight boxes of 100 seeds each were treated with the same
+moisture level. Four boxes were covered and four left uncovered. The process was
+repeated at six different moisture levels.
+
+We are asked to plot the germination percentage against the moisture level on two side-by-side
+plots according to the coverage of the box. Plots cen be seen below.
+```{r }
+data(seeds)
+
+cov <- subset(seeds, seeds[,3]== "yes")
+uncov <- subset(seeds, seeds[,3]== "no")
+
+par(mfrow=c(1,2))
+ggplot(cov, aes(x=moisture, y=germ)) + 
+  geom_point()+
+  geom_smooth(method=lm)
+
+ggplot(uncov, aes(x=moisture, y=germ)) + 
+  geom_point()+
+  geom_smooth(method=lm)
+```  
+
+From the plots we see that for covered boxes, germination percentage tend to decreases as the moisture level increase while it does not change much for uncovered boxes. This is an unexpected result and might be due to germination percentages for moisture level 11 for each box is being zero.
+
+When we create a new factor describing the box and ddd lines to the previous plot that connect observations
+from the same box, plots are as below:
+
+```{r }
+seeds <- mutate(seeds, box = 1:nrow(seeds))
+seeds$box <- factor(floor((seeds$box-1)/6 )+1)
+
+cov <- subset(seeds, seeds[,3]== "yes")
+uncov <- subset(seeds, seeds[,3]== "no")
+
+par(mfrow=c(1,2))
+ggplot(data=cov, aes(x=moisture, y=germ, line=box, group=box, color = box)) +
+  geom_line()+
+  geom_point()
+  
+ggplot(data=uncov, aes(x=moisture, y=germ, line=box, group=box, color = box)) +
+  geom_line()+
+  geom_point()
+
+
+```  
+It seems like, there is not much of a box effect. Also, moisture level 11 seems to have some problems, i.e. it is equal to 0 for each box which is unexpected. Probably, value for level 11 is missing so we shall remove them and continue to the analysis with updated data.
+
+```{r }
+seeds_update <- subset(seeds, moisture!= 11)
+
+cov <- subset(seeds_update, seeds_update[,3]== "yes")
+uncov <- subset(seeds_update, seeds_update[,3]== "no")
+
+par(mfrow=c(1,2))
+ggplot(data=cov, aes(x=moisture, y=germ, line=box, group=box, color = box)) +
+  geom_line()+
+  geom_point()
+
+ggplot(data=uncov, aes(x=moisture, y=germ, line=box, group=box, color = box)) +
+  geom_line()+
+  geom_point()
+
+```  
+
+Now, we shall fit a binomial response model including the coverage, box and moisture predictors.
+
+```{r }
+total = 100
+# blmod <- glm(cbind(germ,total-germ) ~ moisture + covered + box,
+#              family=binomial, seeds)
+
+blmod <- glm(cbind(germ,total-germ) ~ moisture + covered + box,
+             family=binomial, seeds_update)
+blmod
+
+```
+To test for the significance of a box effect in the model, we will use ANOVA.
+```{r }
+anova(update(blmod, . ~ . - box), blmod, test="Chisq")
+```
+From the results, we see that p-value is quite small so we can say that box effect has a significance.
+
+```{r }
+ggplot()+
+  geom_point(aes(x = predict(blmod, type="response"),y = residuals(blmod)))+
+  xlab('Predicted Values') +
+  ylab('Residuals')
+```
+
+Residuals seems to around zero, although their range is not small. They do not seem to have a particular shape.
+
+```{r }
+ggplot()+
+  geom_point(aes(x = seeds_update$moisture[1:23],y = residuals(blmod)[1:23], color = "uncovered"))+
+  geom_point(aes(x = seeds_update$moisture[23:47],y = residuals(blmod)[23:47], color = "covered"))+
+  xlab('Moisture') +
+  ylab('Residual')
+```
+We see that for moisture level 1 and 3, residuals seems to be similar. For other moisture levels, they seem to be grouped which suggest that model cannot fit well both covered and uncovered values. 
+
+## Question 4
+We are given "aflatoxin" data. It has dose, total and tumor columns.
+```{r }
+data(aflatoxin)
+
+ggplot(data=aflatoxin, aes(x=dose, y=tumor/total)) +
+  geom_line()+
+  geom_point()
+```
+
+From the plot of the proportion of animals with liver cancer against the dose, we see that as the dose increases, proportion of animals with liver cancer increases.
+
+```{r }
+
+blmod <- glm(cbind(tumor, total - tumor) ~ dose,
+             family=binomial, aflatoxin)
+blmod
+summary(blmod)
+```
+When a model fitted the data, we see a quite low deviance and a low p-value for both intercept and coefficient indicating that model is likely to be a good fit. 
+
+```{r }
+1-pchisq(116.524 - 2.897 ,1)
+confint(blmod)
+
+```
+In order to test the statistical significance of the dose first we use the difference of null and residual deviance. Difference shoud be distributed with $\chi^2$ with degrees of freedom given by the difference of the parameters. We see that p-value is really close to zero, so we fail to reject the hypothesis that the null model is a better fit or dose is ineffective on the number of animals with liver cancer.
+Other test it to check for confidence interval of coefficient of dose, to see if it includes zero. We see that interval does not includes zero, indicating that dose has a real effect on the response variable.
+
+Predicted probability of liver cancer over the range of the data is shown in the graph below with blue line. Red line represent the data shown in (a).
+
+```{r }
+d <- aflatoxin %>% mutate(pred = predict(blmod, type="response"))
+
+ggplot() +
+  geom_line(data = d, aes(x = dose, y = tumor/total), color = "red") +
+  geom_line(data = d, aes(x =dose, y = pred), color = "blue") +
+  geom_point() + 
+  xlab('Dose') +
+  ylab('Proportion')
+
+```
+Now, we are to change to a probit link. We should compute the predicted probability under this model
+and add the curve to the existing plot. Newly predicted values are represented on the grap with green line.
+
+```{r }
+
+blmodprobit <- glm(cbind(tumor, total - tumor) ~ dose,
+             family=binomial(link=probit), aflatoxin)
+summary(blmodprobit)
+
+d <- d %>% mutate(predprobit = predict(blmodprobit, type="response"))
+
+ggplot() +
+  geom_line(data = d, aes(x = dose, y = tumor/total), color = "red") +
+  geom_line(data = d, aes(x =dose, y = pred), color = "blue") +
+  geom_line(data = d, aes(x =dose, y = predprobit), color = "green") +
+  geom_point() + 
+  xlab('Dose') +
+  ylab('Proportion')
+```
+As can be seen from the graph, both methods predicts similar to real values except the first ones.
+
+Now we shall compute the predicted probability of liver cancer for a dose of 25 ppb on the
+link scale and then compute a 95% confidence interval. Lastly, we should transform onto the probability
+scale. T do so, we should extract the coefficients of the model and multiply it with new data and then transform it using the ilogit function. Standard error and confidence interval are calculated similarly.
+
+```{r }
+blmodsum <- summary(blmod)
+x0 <- c(1,25)
+eta0 <- sum(x0*coef(blmod))
+ilogit(eta0)
+
+(cm <- blmodsum$cov.unscaled)
+se <- sqrt( t(x0) %*% cm %*% x0)
+ilogit(c(eta0-1.96*se,eta0+1.96*se))
+```
+To compute the predicted probability directly on the probability scale, we use predict function. It also returns standard error. We will use this standard error to construct a 95% confidence interval
+for the probability. 
+```{r }
+predict(blmod,newdata=data.frame(dose=25),type = c("response"),se.fit = TRUE)
+c(0.3134978-1.96*0.06836426 ,0.3134978+1.96*0.06836426)
+```
+Second choice gives a slightly larger interval.
+
+To compute the effective dose at 1%, 10% and at 50% levels with associated standard error, we will use dose.p function from MASS library. 
+
+```{r }
+library(MASS)
+dose.p(blmod,p=c(0.01,0.1,0.5))
+
+```
+After calculation, we see that for 1% effective level of dose, prediction is negative and 95% of confidence interval also does not include a positive number or zero. We know that a level of dose cannot be zero, so this is probably caused by the model not being fit very well for the first couple of data point.
+

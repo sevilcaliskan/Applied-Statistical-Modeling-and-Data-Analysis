@@ -1,0 +1,392 @@
+---
+title: <center> <h3>Spring 2018 IE 553 Applied Statistical Modeling and Data Analysis</h3>  <h2> Homework 1  </h2> </center>
+author: "Sevil Çalýþkan"
+date: "15/05/ 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(magrittr)
+library(tidyverse)
+library(knitr)
+library(kableExtra)
+library(lattice)
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+## Question 1
+
+In question 1, we have the information that 20 random temperature readings are taken in a location, they are assumed to have Normal distribution with mean $\theta$ and variance 1 and their maximum is reported as 3.5°C. We do not know what are the other 19 readings, the only information we have is the maximum of them. In this case, using only the maximum value with loglikelihood function with mean $\theta$ and variance 1 would give us the wrong estimation since we know that the only reading value we have is the maximum. As a result first we should derive the distribution of the maximum value of 20 random variables with mean $\theta$ and variance 1, then use the maximum value to calculate the maximum likelihood of mean $\theta$.
+
+Let M be the random variable for the maximum value of 20 i.i.d random variables from the normal distribution with mean mean $\theta$ and varience 1. 
+\begin{align*}
+ M \sim \mathrm{max}(X_i),\; i=1,2,..,20.
+\end{align*}
+
+Distribution of M is given by the derivative of:
+\begin{align*}
+F_M(x) = P(M \le x) = P(X_1 \le x, X_2\le x, ..,X_{20} \le x) 
+= \prod^{20}_{i=1}P(X_i\le x).
+\end{align*}
+
+After derivation it becomes:
+\begin{align*}
+f_M(x) = n*\Phi(\frac{X-\theta}{\sigma})^{n-1} * \phi(\frac{X-\theta}{\sigma})
+\end{align*}
+
+
+Now we can use the maximum value to calculate the maximum likelihood estimator of $\theta$. Also loglikelihood function becomes:
+
+```{r Loglikelihood function}
+
+n <- 20
+pdf <- function(x, mean, sd){
+  n*(pnorm(x, mean = mean, sd = sd, lower.tail = TRUE, log.p = FALSE))^(n-1)*dnorm(x, mean = mean, sd = sd, log = FALSE)}  
+
+x <- 3.5
+
+ll <- function(theta, x) {
+  pdf(x=x, mean=theta, 
+        sd=1)%>% log()
+}
+```
+
+
+We can now plot the loglikelihood function. Since the max value is 3.5°C and varince is one, a range between [-3.5, 3.5] should be a good choice.
+
+
+```{r likelihoodPlot, out.width="50%", fig.cap="Loglikelihood function of mean"}
+
+ll.on.grd <- expand.grid(mu=seq(-3.5, 3.5, len=30)) %>% 
+  mutate(ll=map2_dbl(mu,x,
+                  ~ll(.x, .y), x=x)) 
+
+plot(ll.on.grd, type = "l", main = "Loglikelihood function of temperatures")
+```
+
+As can be seen from the figure, maximum likelihood estimator of mean seems to be around 2, and it make sense since maximum value is 3.5 and varience is 1.
+
+Using the loglikelihood function, we can calculate the MLE of $\theta$ now.
+
+
+```{r Find MLE of mean}
+theta <- 3.5
+res <- optim(theta, ll, hessian = TRUE, method="BFGS", control=list(fnscale=-1), x=x)
+theta <- res$par
+
+theta
+```
+
+
+Expectation maximization algorithm is another method we can use to calculate MLE of the mean. It starts from a random point, estimates the loglikelihood in our case, maximizes the the estimation for the mean and uses this estimation again to calculate loglikelihood until no significant increase is seen in the loglikelihood.
+
+
+```{r Apply EM algoritm}
+
+#E step
+maxIt <- 1000
+numIt <- 1
+tol <- 1e-6
+converged <- FALSE
+ll.vec <- rep(NA, maxIt)
+ll.vec[1] <- ll(theta, x)
+theta <- -5
+
+while (!converged & numIt < maxIt){
+  m <- optim(theta, ll, method="BFGS", control=list(fnscale=-1), x=x)
+  theta <- m$par
+  e <- ll(theta, x)
+  
+  numIt = numIt + 1
+  ll.vec[numIt] <- e
+  converged <- ((ll.vec[numIt]-ll.vec[numIt-1])/(abs(ll.vec[numIt-1])))< tol
+}
+c(numIt, theta)
+
+```
+
+In our case, it gives the same result with MLE and converges immediately.
+
+To calulate confidence interval based on Wald statistic, we should get the second derivative of the loglikelihood function or inverse of the information matrix which the hessian of the loglikelihood function.
+
+```{r}
+
+#confidence interval Wald
+mle <- res$par
+fisher <- -res$hessian
+varMLE <- (fisher)^(-1)
+
+alp <- 0.2
+
+inter <- c(mle + (-1)*qnorm(1-alp/2)*sqrt(varMLE),mle + (1)*qnorm(1-alp/2)*sqrt(varMLE))
+inter
+```
+
+
+To calulate confidence interval based on likelihood-ratio statistic, we should first calculate the value of loglikelihood function which corresponds to:
+$$
+\begin{align*}
+ \ell(\widehat{\theta}) - \frac{1}{2}\chi^2_{p, 1-\alpha}
+\end{align*}
+$$
+then find the roots of the function at that value. We know that there should be two values since the loglikelihood is parabolic. Interval between those values will be the confidence interval. p is 1 in this case since we are only looking for one parameter and $\alpha$ is taken as 0.2.
+
+
+```{r}
+
+r <- ll(theta, x)-1/2*qchisq(1-alp,1,lower.tail = TRUE)
+region  <- function (theata){ll(theata, x=x)-r}
+
+#intervals for uniroot function is set by checking the data of the loglikelihood graph.
+c(uniroot(region, c(-5,2))$root, uniroot(region, c(2,5))$root)
+
+```
+
+Lastly, null hypothesis $H_0 : \theta = 0$ at 5% level of significance is tested with both Wald statistic and likelihood-ratio statistic. After statistics are calculated with each method, we should compare them with the values corresponding to our $\alpha$ value. We are already %80 confident that $\theta$ is not equal to zero since the both confidence intervals do not include. However, with $\alpha = 0.05$ confidence intervals would be larger and they might include zero. 
+
+
+```{r}
+
+w <- (mle - 0)/sqrt(mle/n)
+z <- qnorm((1-0.05/2),0,1, lower.tail = TRUE)
+#Reject the null hypothesis if w>z
+w > z
+
+```
+Wald statistic is greater than the correspoding z-value, so we reject the null hypothesis.
+
+```{r}
+lrt <- 2*(ll(mle,x) - ll(0, x))
+xsq <- qchisq(1-0.05,1, lower.tail = TRUE)
+#Reject the null hypothesis if lrt>xsq
+lrt > xsq
+
+```
+
+Same as Wald test, we reject the null hypothesis with loglikelihood ratio test.
+
+
+## Question 2
+
+In question 2, we know that there are 25 petri dishes, the numbers of bacteria in different petri dishes are assumed to be i.i.d. Poisson distributed random variables with common mean ??. If the number of bacteria in a petri dish is less than two, then the machine cannot count them and report nothing and machine reported 15 counts, the sum of which equals 34. In this case, we should find the probability mass function of 25 random variables, 10 of which is less than or equal to 1 and sum of 15 of them equals to 34. We know that sum of i.i.d Poisson random variables is distributed with Poisson with parameter $n*\lambda$. As a result loglikelihood function is given by:
+$$
+\begin{align*}
+\ell(x) = log\left\{\left\{exp(-\lambda)*\frac{\sum^{1}_{i=0}\lambda^i}{i!}\right\}^{10}* \left\{\frac{(15*\lambda)^xexp(-(15*\lambda)}{x!}\right\}\right\}
+\end{align*}
+$$
+
+Now, we can caulculate loglikelihood function and maximize it over $\lambda\.
+
+```{r likelihoodsecond, out.width="50%", fig.cap="Loglikelihood function of the parameter"}
+u <- 1
+l <- 34
+ll2 <- function(lambda){10*ppois(u, lambda = lambda, lower.tail = TRUE, log.p = TRUE) + dpois(l, lambda = 15*lambda, log = TRUE) }
+
+ll.on.grd <- expand.grid(theta=seq(0, 5, len=25)) %>% 
+  mutate(ll2=ll2(theta)) 
+
+plot(ll.on.grd, type = "l", main = "Loglikelihood function of lambda")
+
+```
+We can see from the plot that MLE of $\lambda$ lies around 2.
+
+```{r}
+lambda <- 5
+res <- optim(lambda, ll2, hessian = TRUE, method="BFGS", control=list(fnscale=-1))
+lambda <- res$par
+
+lambda
+
+```
+When loglikelihood function is maximized over $\lambda$, we find MLE of $\lambda$ as 1.60654.
+
+Confidence interval based on Wald statistic is calculated as in the first question.
+
+```{r}
+
+#confidence interval
+mle <- res$par
+fisher <- -1 * res$hessian
+varMLE <- fisher^(-1)
+
+alp <- 0.2
+
+c(mle + (-1)*qnorm(1-alp/2)*sqrt(varMLE),mle + (1)*qnorm(1-alp/2)*sqrt(varMLE))
+```
+
+COnfidence interval based on likelihood ratio is calculated as in the first question.
+
+```{r}
+r <- ll2(mle)-1/2*qchisq(1-alp,1,lower.tail = TRUE)
+region  <- function (mle){ll2(mle)-r}
+
+#intervals for uniroot function is set by checking the data of the loglikelihood graph.
+c(uniroot(region, c(1,1.5))$root, uniroot(region, c(1.5,6))$root)
+```
+
+Last part of the question is to test the null hypothesis $H_0: \lambda > 2 $ at 5% significance level. In the above calcuations, we have seen that both 80% confidence intervals do not include 2, however they are close. 
+
+Two types of statistics will be used to test the hypothesis as in the first question: Wald's and loglikelihood ratio. Now that are testing that $\lambda > 2$, test will be a one-tail test, i.e. we will check only the tail where $\lambda > 2$.
+
+```{r}
+
+w <- (mle - 2)/sqrt(mle/n)
+z <- qnorm((1-0.05),0,1, lower.tail = FALSE)
+#Reject the null hypothesis if w>z
+w > z
+```
+
+```{r}
+lrt <- (ll2(mle) - ll2(2))
+xsq <- qchisq(1-0.05,1, lower.tail = FALSE)
+
+#Reject the null hypothesis if lrt>xsq
+lrt > xsq
+
+```
+
+With both statistics, we reject the null hypothesis that $\lambda > 2$.
+
+## Question 3
+For question 3, we know that n=675 students had had lunch in the cafeteria on the day poisoning events happened. m=511 students responded to the queries about whether they suffered from food poisoning and whether they had had meat as the main dish at lunch. For the remaining 164 students, main dish information was missing, but the health status was retrieved from the school’s health center records. In this case $N_{obs} + N_{mis}$ would be the complete data and $N_{0+}, N_{1+}$ would be the missing ones. To fill the missing values, EM algoritm can help. First we have to calculate the E-step.
+
+To do so, we need the conditional probability mass function $p_{N_{0+},N_{1+} \mid N_{ij}} ({N_{0+},N_{1+}} \mid {N_{ij}}, \widehat{\theta}_n)$. We know that:
+
+$$
+P(X_i = x_i \mid X_j = x_j) = \frac{P(X_i = x_i \cap X_j = x_j)}{P(X_j=x_j)}
+$$
+
+So the conditional probability mass function becomes:
+$$
+p_{N_{0+},N_{1+} \mid N_{ij}} ({N_{0+},N_{1+}} \mid {N_{ij}}, \widehat{\theta}_n) = \frac{P(N_{0+} = n_1, N_{1+} = n_2, N_{00} = n_3, N_{01} = n_4, N_{10} = n_5, N_{11} = n_6)}{ P(N_{00} = n_3, N_{01} = n_4, N_{10} = n_5, N_{11} = n_6)}
+$$
+We know that $N_{0+} = N_{00}^{m} + N_{01}^{m}$ which are unobserved, so numerator changes to $P(N_{00}^{m} = x_1, N_{01}^{m} = x_2, N_{10}^{m} = x_3, N_{11}^{m} = x_4)$ where $x_1 + x_2 = n_1$ and $x_3 + x_4 = n_2$. E step, in this case, is estimating the missing data values which are $N_{ij}$ values with given $\widehat{\theta}$ and $N_{ij}^{obs}$.
+
+$$
+ Q(\theta \mid \widehat{\theta}_n) := E_{\mathbf{N_{i+}}\sim p_{N_{i+} \mid N_{ij}^o} (\cdot \mid \mathbf{N_{ij}^o}, \widehat{\theta}_n)} \ell_\mathrm{complete}(\theta \mid \mathbf{N_{ij}^o}, \mathbf{N_{i+}})
+$$
+And the M step would be:
+$$
+ \widehat{\theta}_{n+1} := \arg \max_\theta  Q(\theta \mid \widehat{\theta}_n).
+$$
+We know that $N_{i+}$ and $N_{ij}$ are actually coming from the same distribution, multinomial, and the expectation of multinomial is $N_{ij}$ =  $N*\widehat{\theta}_i$. For $N_{i+}$ case, we know the N's and we can estimate $\widehat{\theta}_i$ with observed values. Then we can estimate the $N_{ij}^m$'s. So, E-step becomes:
+$$
+ Q(\theta \mid \widehat{\theta}_n) := \left\{N_{i+}*\frac{\widehat{\theta}_{ij} }{\widehat{\theta}_{i0}+\widehat{\theta}_{i1}}\right\} \frac{N!}{\prod^{i,j}_{k,l=1}(N_{ij}^o+N_{ij}^m)!}*\prod^{i,j}_{k,l=1}\theta_{ij}^{(N_{ij}^o+N_{ij}^m)}
+$$
+
+M - step is maximizing $\widehat\theta$ by $\widehat\theta_{ij}^{n+1} = N*\widehat\theta_{ij}^{n}$. So E-M algorithm would be applied as below:
+
+
+```{r }
+
+obs <- c(77, 148, 8, 278)
+mis<- c(75,89)
+thetahat <- c(0.25,0.25,0.25,0.25)
+ll3 <- function(theta, x){dmultinom(x, prob = theta, log = TRUE )}
+Nm <- c(75,0,89,0)
+
+  #Step E
+Nm[1] <- mis[1]*thetahat[1]/(thetahat[1]+thetahat[2])
+Nm[2] <- mis[1]*thetahat[2]/(thetahat[1]+thetahat[2])
+Nm[3] <- mis[2]*thetahat[3]/(thetahat[3]+thetahat[4])
+Nm[4] <- mis[2]*thetahat[4]/(thetahat[3]+thetahat[4])
+
+maxIt <- 1000
+numIt <- 1
+tol <- 1e-6
+converged <- FALSE
+ll.vec <- rep(NA, maxIt)
+ll.vec[1] <- ll3(thetahat, obs+Nm)
+
+while (!converged & numIt < maxIt){
+  #Step M
+for( i in 1:4){
+thetahat[i] <- (Nm[i]+obs[i])/(sum(obs)+sum(mis))}
+
+
+  #Step E
+Nm[1] <- mis[1]*thetahat[1]/(thetahat[1]+thetahat[2])
+Nm[2] <- mis[1]*thetahat[2]/(thetahat[1]+thetahat[2])
+Nm[3] <- mis[2]*thetahat[3]/(thetahat[3]+thetahat[4])
+Nm[4] <- mis[2]*thetahat[4]/(thetahat[3]+thetahat[4])
+
+
+e <- ll3(thetahat, obs+Nm)
+  numIt = numIt + 1
+  ll.vec[numIt] <- e
+  converged <- ((ll.vec[numIt]-ll.vec[numIt-1])/(abs(ll.vec[numIt-1])))< tol
+}
+
+obsA = obs
+NmA = Nm
+thetahatA = thetahat
+
+c(numIt, thetahatA)
+obsA + NmA
+```
+In part c and d, null hypothesis is 
+$$
+  \theta_{ij} = \alpha^{i}(1-\alpha)^{1-i} \beta^{j}(1-\beta)^{1-j}, \quad i,j=0,1
+$$
+and E step would stay same as estimating $N_{ij}^m$ values. Maximizing step would change as maximizing $\widehat\beta$, since $\widehat\alpha$ value is already known (proportion of poisoned students to not poisoned ones). After maximizing beta, $\widehat\theta$ values can be calculated again.
+
+```{r }
+
+obs <- c(77, 148, 8, 278)
+mis<- c(75,89)
+thetahat <- c(0.25,0.25,0.25,0.25)
+alpha <- 1 - (77 + 148 + 75)/675
+beta <- 278 / sum(obs)
+ll3 <- function(theta, x){dmultinom(x, prob = theta, log = TRUE )}
+Nm <- c(75,0,89,0)
+
+  #Step E
+Nm[1] <- mis[1]*(1-beta)
+Nm[2] <- mis[1]*(beta)
+Nm[3] <- mis[2]*(1-beta)
+Nm[4] <- mis[2]*(beta)
+
+maxIt <- 1000
+numIt <- 1
+tol <- 1e-6
+converged <- FALSE
+ll.vec <- rep(NA, maxIt)
+ll.vec[1] <- ll3(thetahat, obs+Nm)
+
+while (!converged & numIt < maxIt){
+  #Step M
+
+beta <- (obs[4]+Nm[4]+obs[2]+Nm[2])/675
+thetahat[1] = (1-alpha)*(1-beta)
+thetahat[2] = (1-alpha)*(beta)
+thetahat[3] = (alpha)*(1-beta)
+thetahat[4] = (alpha)*(beta)
+
+  #Step E
+Nm[1] <- mis[1]*(1-beta)
+Nm[2] <- mis[1]*(beta)
+Nm[3] <- mis[2]*(1-beta)
+Nm[4] <- mis[2]*(beta)
+
+
+e <- ll3(thetahat, obs+Nm)
+  numIt = numIt + 1
+  ll.vec[numIt] <- e
+  converged <- ((ll.vec[numIt]-ll.vec[numIt-1])/(abs(ll.vec[numIt-1])))< tol
+}
+
+obsC = obs
+NmC = Nm
+thetahatC = thetahat
+
+c(numIt, thetahatC)
+obsC + NmC
+c(alpha, beta)
+```
+In the last question, we should test the null hypothesis whether $P_k$ and $M_k$ are independent or not. We have $\widehat\theta$ values for either situation so we can use them to test it with LRT.
+
+```{r }
+2*(ll3(thetahatA, obsA+NmA) - ll3(thetahatC, obsC+NmC)) > qchisq(1-0.05,4, lower.tail = TRUE)
+```
+As the test implies, LRT statistic is larger than $\chi^2$ statistic so we reject the null hypothesis that the number of poisoned students and number of students who ate meat are independent. 

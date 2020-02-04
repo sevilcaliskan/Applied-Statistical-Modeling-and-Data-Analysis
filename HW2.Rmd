@@ -1,0 +1,369 @@
+---
+title: <center> <h3>Spring 2018 IE 553 Applied Statistical Modeling and Data Analysis</h3>  <h2> Homework 2  </h2> </center>
+author: "Sevil Çalýþkan"
+date: "17 May 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+
+library(magrittr)
+library(tidyverse)
+library(knitr)
+library(kableExtra)
+library(lattice)
+library(Rcpp)
+
+
+opts_chunk$set(echo = TRUE, collapse=TRUE, cache=TRUE)
+```
+
+## Question 1
+
+In this question we are asked to the problem proposed. Solution can be seen below.
+```{r }
+require(Rcpp)
+
+#Part a
+v <- 0:9
+vec <- replicate(3, v, simplify=FALSE)
+vec[[1]] <- vec[[1]][-1]
+tbl <- expand.grid(vec) %>% mutate( number = Var1*100 + Var2*10 + Var3 )%>%mutate(check= Var1+Var2^2+Var3^3 == number)
+filter(tbl, check == TRUE)$number
+
+#I cannot run this part while knitting since it gives an error about Rtools and PATH. I have downloaded Rtools, added it to the PATH and I have really tried to make it run, but I couldn't. Code will not run during knitting but it runs manually (ctrl+enter). I am really sorry for the inconvenience.
+
+# #Part b
+# cppFunction(depends = "Rcpp","NumericVector findNums(int digitNum) {
+# 
+#     NumericVector v(0);
+#     int bottom = pow(10, digitNum-1);
+#     int upper = pow(10, digitNum) - 1;
+# 
+#       for (int i=0; i<upper-bottom+1; i++){
+#     		int num = 0;
+#     		int b = bottom +i;
+# 
+#         for (int k=digitNum-1; k>=0; k=k-1){
+#         		num = num + pow((b/(int)pow(10,k)) , digitNum-k);
+#     		    b = b - (b/(int) pow(10,k))*(int) pow(10,k);
+# 
+#             if (num == bottom + i)
+#     		      v.push_back(num);
+#     	  }
+#       }
+#     return v;
+#     }")
+# 
+# findNums(3)
+# 
+# #Part c
+# findNums(4)
+# findNums(5)
+# findNums(6)
+
+
+```
+
+## Question 2
+
+In this question, it is asked if the rates of defective refrigirators follows the production rates ot those shifts. To test whether it does, we should first come up with a null hypothesis. Number of defective refrigirators would be distributed with multinomial in this case since a refrigirator produced in a shift can be defective or not. In this case, wa want to see if the production rates of shifts apply to the defective refrigirator rates, so null hypothesis would be if the parameters of the binomial distribution equals to corresponding shift rates. 
+$$
+\begin{align*}
+ H_0 : {\theta}= \left\{p_1, p_2, p_3 \right\} \text{ where }\ p_1 = \frac{4}{7}\ ,\  p_2 = \frac{2}{7}\ ,\ p_3 = \frac{1}{7}
+\end{align*}
+$$
+Alternative hypothesis, then, would be that the observed numbers in defective products follow the maximum likelihood estimate of the observed values.
+
+$$
+\begin{align*}
+ H_1 : {\theta}= \left\{p_1, p_2, p_3 \right\} \text{ where }\ p_1 = \frac{20}{50}\ ,\  p_2 = \frac{16}{50}\ ,\ p_3 = \frac{14}{50}
+\end{align*}
+$$
+The probability of the observed defectives is given by 
+$$
+\begin{align*}
+ P = \frac{50!}{20!*16!*14!}*p_1^{20}*p_2^{16}*p_3^{14}
+\end{align*}
+$$
+where p values depends on the hypothesis. Let us use loglikelihood ratio test. Statistic would be calculated as
+
+$$
+\begin{align*}
+ 2*\log \left\{\frac{P_{H_1}}{P_{H_0}}\right\}
+\end{align*}
+$$
+SO the statistic would be 
+$$
+\begin{align*}
+ 2*\log \left\{\frac{\frac{20}{50}^{20}*\frac{16}{50}^{16}*\frac{14}{50}^{14}}{\frac{4}{7}^{20}*\frac{2}{7}^{16}*\frac{1}{7}^{14}}\right\}
+\end{align*}
+$$
+This statistic's distribution converges to that of chi-squared with (3-1) degrees of freedom. As a result, to reject the hypothesis, value calculated above should be larger than $\chi^2_{2,0.5}$ indicating that observed values are so different than the expected distribution that it cannot occur only by chance.
+
+```{r question 2}
+lrt <- 2*log(((20/50)^20*(16/50)^16*(14/50)^14)/((4/7)^20*(2/7)^16*(1/7)^14))
+lrt > qchisq(0.05,2, lower.tail = FALSE)
+lrt > qchisq(0.01,2, lower.tail = FALSE)
+
+```
+lrt is larger than chi-squared statistic when significance = 0.05 however it is less than the statistic when significance is 0.01. As a result, we cannot reject the null hypothesis directly and more data to test would solve this problem.
+
+## Question 3
+In question 2, kill rates of 4 different pesticides are wanted to be compared. Each of them experimented on independent samples of 200 flies and the number of dead and alive flies are given. Here, we shall use binomial distribution for each pesticide's kill rate since each fly either live or die. It is asked if each kill rate is same or in other words if they follow same distribution. Here we will assume that one of the pesticides follows the true distribution and we will use the maximum likelihood estimator of it to compare with others. Let us first calculate the MLEs of parameters of each distribution.
+
+Binomial distribution is given by :
+
+$$
+\begin{align*}
+ \frac{n!}{(n-k!)*k!}*p^k*(1-p)^{n-k}
+\end{align*}
+$$
+and we are interested in estimating p, we are given n as 200 and k as number of dead flies for each pesticides. Maximum likelihood estimate of p is given by
+$$
+\begin{align*}
+ \widehat{p} = \frac{k}{n}
+\end{align*}
+$$
+So, MLEs of each pesticide are calculated as below:
+$$
+\begin{align*}
+ \widehat{p}_A = \frac{76}{200},\;&&  \widehat{p}_B = \frac{53}{200}, \;&& \widehat{p}_C = \frac{59}{200}, \;&& \widehat{p}_D = \frac{58}{200}
+\end{align*}
+$$
+To compare the rates, one of the p estimates will be chosen as real parameter to test it with others. Let us choose $\widehat{p}_A$ as the true p. Test will be done as in the question 2. LRT will be used and null hypothesis will be $H_0 : {p}= \widehat{p}_A$ and the alternative hypothesis will be $H_1 : {p}= \widehat{p}_i$ where $i = \left\{B,C,D\right\}$. 
+
+LRT statistic is calculated as 
+$$
+\begin{align*}
+ LRT(p) = 2*\log \left\{\frac{P_{H_1}}{P_{H_0}}\right\}
+\end{align*}
+$$
+Now each statistic will be calculated for each pesticide and null hypothesis will be rejected if statistic is larger than  $\chi^2_{1,\frac{0.5}{3}$ since we are doing multiple comparisons. Degrees of freedom is one in this question since there is only one parameter. If at least one of the null hypothesis is rejected, we can say that rates of kill of pesticides are not same. 
+
+```{r qestion 2}
+
+lrtb <- 2*log(((53/200)^53*(1-53/200)^147)/((76/200)^53*(1-76/200)^147))
+lrtb > qchisq(0.05/3,1, lower.tail = FALSE)
+lrtb > qchisq(0.01/3,1, lower.tail = FALSE)
+
+lrtc <- 2*log(((59/200)^59*(1-59/200)^141)/((76/200)^59*(1-76/200)^141))
+lrtc > qchisq(0.05/3,1, lower.tail = FALSE)
+lrtc > qchisq(0.01/3,1, lower.tail = FALSE)
+
+lrtd <- 2*log(((58/200)^58*(1-58/200)^142)/((76/200)^58*(1-76/200)^142))
+lrtd > qchisq(0.05/3,1, lower.tail = FALSE)
+lrtd > qchisq(0.01/3,1, lower.tail = FALSE)
+```
+Code chunk above shows that kill rate of pesticide A is different than others when used an $\alpha = 0.05$. With $\alpha = 0.01$ it is different than pesticide B,however we cannot reject the null hypothesis for pesticide C and pesticide D and it makes sense since they closer to the ratio of pesticide A than B and as $\alpha$ gets smaller, area to be rejected gets smaller in order to avoid rejecting null hypothesis when it is true. 
+
+## Question 4
+Question 4 asks whether the given data follows Poisson distribution or not. Let us first estimate the mean of the data assuming it follows Poisson.
+$$
+\begin{align*}
+ L(\lambda) &= \prod^n_{i=1} \frac{\lambda^{x_i}}{x_i!}e^{-\lambda}\\
+ \ell(\lambda) &= \sum^n_{i=1} \big[-\lambda + x_i \log \lambda - \log x_i! \big] = -n\lambda + n \bar{x} \log \lambda\\
+ \widehat{\lambda} = \bar{x}=(1/n)\sum^n_{i=1} x_i
+ \end{align*}
+$$
+So, $\widehat{\lambda}$ is calculate as below:
+```{r }
+
+data <- rep(0:5, times=c(296,74,26,8,4,6))
+lambda <- mean(data)
+table(data)
+lambda
+
+expec=dpois(0:5,lambda=mean(data))*length(data)
+expec
+```
+
+The null hypothesis in this case becomes the data distributed with Poisson and the the alternative hypothesis is it is Poisson with parameter $\widehat{\lambda}$. In order to use LRT, we should calculate the likelihood of both hypothesis. For null hypothesis, likelihood will be calculated with estimated probabilities of frequencies. For alternative, likelihood function of Poisson will be used. 
+
+
+```{r }
+
+pcap <- expec/sum(expec)
+pcap[6]<- pcap[6] + 1- sum(pcap)
+
+ll_expected <- -6*lambda + sum(c(296,74,26,8,4,6))*log(lambda)
+ll_saturated <- log(pcap[1]^296*pcap[2]^74*pcap[3]^26*pcap[4]^8*pcap[5]^4*pcap[6]^6)
+
+lrt <- 2*( ll_expected - ll_saturated)
+lrt > qchisq(0.05,7, lower.tail = FALSE)
+```
+
+As we see, lrt is much larger than the statistic. So, we reject the null hypothesis, i.e. data does not follow Poisson distribution
+
+We can also test the data with chi-square test. Chi-square test compares observed and expected values of frequencies and calculates a statistic from them.
+
+```{r }
+probs <- dpois(0:5, lambda)
+probs[6] <-probs[6]+1-sum(probs)
+
+chisq.test(x=c(296,74,26,8,4,6), p=c(probs), simulate.p.value=TRUE)
+
+```
+Also in this test, we see that p-value much smaller than 0.05 or 0.01 so, again, we can reject the null hypothesis.
+
+
+## Question 5
+In question 5, we are given 110 consecutive winter days indicating a child suffered an asthma attack or not and we are asked which model explains the data best among i.i.d Bernoulli trials, first order Markov chain and second-order Markov chain. In order to compare the models, we can use Akaike information criterion (AIC) or Bayesian information criterion (BIC). To see if they choose differently, we shall use both. Formulas of both criterion is given by:
+
+$$
+\begin{align*}
+ AIC = 2k - 2\ell_{max}(\widehat{\theta})\\   
+ BIC = ln(n)k-2\ell_{max}(\widehat{\theta})
+\end{align*}
+$$
+where k is the number of estimated parameters in the model, n is the number of data points  and $\ell_{max}$ is log-likelihood at its maximum point of the model estimated.
+So, we should calculate the log-likelihood functions for each model and calculate the maximum values. Let us first calculate the loglikelihood function for Bernoulli trials. Bernoulli trials are distributed by binomial distribution, however we are not allowed shuffle the data since order of 0s and 1s are important. As a result log likelihood function will be:
+$$
+\begin{align*}
+ \ell(\widehat{\theta}) =log \left\{p^k*(1-p)^{n-k}\right\}
+\end{align*}
+$$
+We know that n = 110 and k = 19 and MLE of p is equal to $\widehat{p} = \frac{k}{n}$. As a result, $\widehat{p} = \frac{19}{200}$. So, maximum of log likelihood function will be
+$$
+\begin{align*}
+ \ell(\widehat{\theta}) =log \left\{\frac{19}{110}^{19}*(1-\frac{19}{110})^{91}\right\}
+\end{align*}
+$$
+
+
+```{r }
+days <- c(0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,1,1,0,0,0,0,1,1,1,1,1,1,1,0,0,0,0,0,0,1,1,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0)
+#p <- 0.5
+#ll <- function(p){log(factorial(110)/(factorial(91)*factorial(19))*p^19*(1-p)^91)}
+#res <- optim(p, ll, hessian = TRUE, method="BFGS", control=list(fnscale=-1))
+#p <- res$par
+#ll_max = ll(p)
+
+ll_max <- log((19/110)^19*(1-19/110)^91)
+ll_max
+```
+
+Now, we can calculte AIC and BIC.
+
+```{r }
+AIC <- function(k,lmax){2*k - 2*lmax}
+BIC <- function(k,n,lmax){log(n)*k - 2*lmax}
+
+Bern_AIC <- AIC(1,ll_max)
+Bern_BIC <- BIC(1,110,ll_max)
+
+Bern_AIC
+Bern_BIC
+```
+
+Now, loglikelihood function for first-order Markov chain shall be calculated. 
+
+For first-order Markov chain, we have two parameters: $p_{0}, p_{1}$, where $p_{0}$ is probability of having an asthma attack when the child did not have it the day before. So, the probability of not having an attcak when the child did not have the day before will be $1-p_{0}$. We wil estimate parameters with MLE and use them to calculate the maximum log likelihood. In order to estimate parameters, we should count how many times there is an opportunity to change from a state and how many time the state changes when it has the opportunity. 
+$$
+\text{number of 0's (which can change its state) }= 90\\
+\text{number of transitions from 0 to 1} = N_{0,1} = 7\\
+\text{number of transitions from 0 to 0}= N_{0,0} = 83\\
+\text{--------------------------------------}\\
+\text{number of 0's (which can change its state) }=19\\
+\text{number of transitions from 1 to 0} = N_{1,0} = 8\\
+\text{number of transitions from 1 to 1}= N_{1,1} = 11\\
+$$
+So, $\widehat{p}_{0} = \frac{7}{90}$ and  $\widehat{p}_{1} = \frac{11}{19}$. We can calculate now the likelihood using the number of transitions and transition probabilities.
+$$
+\begin{align*}
+ L =\frac{7}{90}^7*(1-\frac{7}{90})^{83}*\frac{11}{19}^{11}*(1-\frac{11}{19})^{8}
+\end{align*}
+$$
+```{r }
+
+ll_max <- log((7/90)^7*(1-7/90)^83*(11/19)^11*(1-11/19)^8)
+
+first_mar_AIC <- AIC(2,ll_max)
+first_mar_BIC <- BIC(2,110,ll_max)
+
+first_mar_AIC 
+first_mar_BIC 
+```
+
+Now, let us calculate the likelihood of second-order Markov chain. This time, we will estimate 4 parameters: $p_{00}, p_{01}, p_{10}, p_{11}$, where $p_{00}$ is probability of having an asthma attack when the child did not have it two days in a row. So, the probability of not having an attcak when the child did not have two days in a row will be $1-p_{00}$.  We wil estimate parameters with MLE and use them to calculate the maximum log likelihood.
+
+$$
+\text{number of 00's (which can change its state) }= 81\\
+\text{number of transitions from 00 to 1} = N_{00,1} = 8\\
+\text{number of transitions from 00 to 0}= N_{00,0} = 73\\
+\text{--------------------------------------}\\
+\text{number of 01's (which can change its state) }=8\\
+\text{number of transitions from 01 to 0} = N_{01,0} = 2\\
+\text{number of transitions from 01 to 1}= N_{01,1} = 6\\
+\text{--------------------------------------}\\
+\text{number of 10's (which can change its state) }= 8\\
+\text{number of transitions from 10 to 1} = N_{10,1} = 0\\
+\text{number of transitions from 10 to 0}= N_{10,0} = 8\\
+\text{--------------------------------------}\\
+\text{number of 11's (which can change its state) }=11\\
+\text{number of transitions from 11 to 0} = N_{11,0} = 6\\
+\text{number of transitions from 11 to 1}= N_{11,1} = 5\\
+$$
+As a result,
+$$
+\begin{align*}
+ \widehat{p}_{00} = \frac{8}{81},\;&&  \widehat{p}_{01} = \frac{6}{8}, \;&& \widehat{p}_{10} = 0, \;&& \widehat{p}_{11} = \frac{5}{11}
+\end{align*}
+$$
+We can calculate now the likelihood using the number of transitions and transition probabilities.
+$$
+\begin{align*}
+ L =\frac{8}{81}^8*(1-\frac{8}{81})^{73}*\frac{6}{8}^{6}*(1-\frac{6}{8})^{2}*\frac{5}{11}^{5}*(1-\frac{5}{11})^{6}
+\end{align*}
+$$
+```{r }
+
+ll_max <- log((8/81)^8*(1-8/81)^73*(6/8)^6*(1-6/8)^2*(5/11)^5*(1-5/11)^6)
+
+second_mar_AIC <- AIC(4,ll_max)
+second_mar_BIC <- BIC(4,110,ll_max)
+
+second_mar_AIC
+second_mar_BIC
+```
+
+Let us compare AIC and BIC values of models. Best model should have minimum AIC and BIC values.
+
+```{r }
+
+A <- c(Bern_AIC, first_mar_AIC, second_mar_AIC )
+B <- c(Bern_BIC, first_mar_BIC,second_mar_BIC )
+
+min(A) == first_mar_AIC
+min(B) == first_mar_BIC
+```
+For both AIC and BIC, first Markov chain model offer the smallest values so we can say that it explains the data best.
+
+## Question 6
+
+In question 6, we are given a smoke concentration data of the days in question 5 and asken if the asthma attacks of the child is related to the smoke concentration. To check the association we can use different methods. One issue we sould be careful about is data in question 5 is success/failure data, so it is binomial. It is also the response variable, i.e. it is the one to be checked whether it is related to smoke concentration. So, we should use logistic regression in this case to see the relation. In the question 5, we have seen that the asthma attacks are related the day before, so we sould check whether the smoke rate the day before and two day before are related or not. 
+
+$$
+p_i = \frac{e^{x_i^\top \beta}}{1+ e^{x_i^\top \beta}}
+$$
+where $p_i$ is the probability of having an attack on day i and $X_i$ is the smoke concentration on day i. Let us fit the model.
+```{r }
+
+smoke <- c(291,466,730,633,1509,831,1038,403,553,996,400,267,329,466,570,668,446,362,387,246,361,467,940,1041,871,473,732,717,294,396,443,429,336,544,760,672,555,556,298,150,192,428,517,425,1000,1135,322,228,220,360,310,294,138,425,322,512,453,352,317,430,389,357,314,544,1353,720,574,796,246,260,184,172,133,261,406,720,1310,742,979,1701,1966,646,301,295,263,261,450,657,486,333,419,600,415,380,374,370,344,418,617,749,1587,1157,297,253,601,276,380,260,256,363)
+
+days <- factor(days)
+data <- data_frame(smoke_two = smoke[1:108], day_two = days[1:108],smoke_one = smoke[2:109], day_one = days[2:109], attack = days[3:110])
+#contingency <- data_frame(smoke, yes=ifelse(days==1,days,0),no=ifelse(days==0,1,0))
+#contingency <- contingency[order(contingency$smoke),] %>% aggregate(cbind(yes,no)~smoke, data= .,FUN="sum")
+#cbind(as.factor(contingency$yes),as.factor(contingency$no))
+model <- glm(attack ~.,family=binomial(link='logit'),data=data)
+summary(model)
+confint(model)
+# anova(
+#   update(model, . ~ . -smoke),
+#   model, test="LRT")
+
+
+```
+From the summary, we see that the p value of $\beta_{day1}$ (1 if there has been an asthma attack the day before) is quite small (please remember that the null hypothesis in this case is $H_0 : \beta = 0$). Also, when we check the confidence interval for  $\beta_{day1}$, we see that it does not contains 0. When we look to the p-values for the smoke concentrations, we see that although they are small, they do not seem to be below 0.05. We should suspect that they are related but still we cannot say confidently they are.
+
